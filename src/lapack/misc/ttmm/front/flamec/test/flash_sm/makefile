@@ -7,18 +7,18 @@ FNAME        := Ttmm
 SRC_PATH     := ../..
 OBJ_PATH     := .
 
-INST_PATH    := $(HOME)/flame
+INST_PATH    := /opt/libflame
 LIB_PATH     := $(INST_PATH)/lib
 INC_PATH     := $(INST_PATH)/include
-FLAME_LIB    := $(LIB_PATH)/libflame.a
-BLAS_LIB     := $(LIB_PATH)/libgoto.a
+FLAME_LIB    := $(LIB_PATH)/libflame.so
+BLAS_LIB     := /opt/blis/lib/libblis.so
 
 CC           := gcc
 FC           := gfortran
 LINKER       := $(CC)
-CFLAGS       := -I$(SRC_PATH) -I$(INC_PATH) -g -O3 -Wall
+CFLAGS       := -I$(SRC_PATH) -I$(INC_PATH) -I/opt/rocm/include -g -O3 -Wall
 FFLAGS       := $(CFLAGS)
-LDFLAGS      := -L/usr/lib/gcc/x86_64-pc-linux-gnu/4.1.2 -L/usr/lib/gcc/x86_64-pc-linux-gnu/4.1.2/../../../../lib64 -L/lib/../lib64 -L/usr/lib/../lib64 -L/usr/lib/gcc/x86_64-pc-linux-gnu/4.1.2/../../../../x86_64-pc-linux-gnu/lib -L/usr/lib/gcc/x86_64-pc-linux-gnu/4.1.2/../../.. -lgfortranbegin -lgfortran -lm -lpthread
+LDFLAGS      := -lm -lpthread
 
 TEST_OBJS    := $(patsubst $(SRC_PATH)/%.c, $(OBJ_PATH)/%.o, $(wildcard $(SRC_PATH)/*.c))
 TEST_OBJS    += test_$(FNAME).o \

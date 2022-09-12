@@ -7,13 +7,13 @@ FNAME        := Eig_gest
 SRC_PATH     := ../..
 OBJ_PATH     := .
 
-INST_PATH    := /dockerx/libflame_temp
-LIB_PATH     := $(INST_PATH)/lib/x86_64-unknown-linux-gnu/
-INC_PATH     := $(INST_PATH)/include/x86_64-unknown-linux-gnu/
+INST_PATH    := /opt/libflame
+LIB_PATH     := $(INST_PATH)/lib/
+INC_PATH     := $(INST_PATH)/include/
 FLAME_LIB    := $(LIB_PATH)/libflame.so
 #BLAS_LIB     := $(LIB_PATH)/libblas.a
 #BLAS_LIB     := $(LIB_PATH)/libgoto.a
-BLAS_LIB     := -lopenblas
+BLAS_LIB     := /opt/blis/lib/libblis.so
 
 CC           := gcc
 FC           := gfortran

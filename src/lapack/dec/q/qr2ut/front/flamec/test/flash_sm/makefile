@@ -7,19 +7,19 @@ FNAME        := QR2_UT
 SRC_PATH     := ../..
 OBJ_PATH     := .
 
-INST_PATH    := $(HOME)/flame
+INST_PATH    := /opt/libflame
 LIB_PATH     := $(INST_PATH)/lib
 INC_PATH     := $(INST_PATH)/include
-FLAME_LIB    := $(LIB_PATH)/libflame.a
+FLAME_LIB    := $(LIB_PATH)/libflame.so
 #BLAS_LIB     := $(LIB_PATH)/libgoto_core2.a
-BLAS_LIB     := $(LIB_PATH)/libblas_clover.a
+BLAS_LIB     := /opt/blis/lib/libblis.so
 
 CC           := gcc
 FC           := gfortran
 LINKER       := $(CC)
-CFLAGS       := -I$(SRC_PATH) -I$(INC_PATH) -g -O3 -Wall
+CFLAGS       := -I$(SRC_PATH) -I$(INC_PATH) -I/opt/rocm/include -g -O3 -Wall
 FFLAGS       := $(CFLAGS)
-LDFLAGS      := -L/usr/lib/gcc/x86_64-pc-linux-gnu/4.2.3 -L/usr/lib/gcc/x86_64-pc-linux-gnu/4.2.3/../../../../lib64 -L/lib/../lib64 -L/usr/lib/../lib64 -L/usr/lib/gcc/x86_64-pc-linux-gnu/4.2.3/../../../../x86_64-pc-linux-gnu/lib -L/usr/lib/gcc/x86_64-pc-linux-gnu/4.2.3/../../.. -lgfortranbegin -lgfortran -lm
+LDFLAGS      := -lm
 LDFLAGS      += -lpthread
 
 TEST_OBJS    := $(patsubst $(SRC_PATH)/%.c, $(OBJ_PATH)/%.o, $(wildcard $(SRC_PATH)/*.c))

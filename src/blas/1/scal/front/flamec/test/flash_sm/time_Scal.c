@@ -45,6 +45,7 @@ void time_Scal(
   for ( irep = 0 ; irep < nrepeats; irep++ )
   {
     FLASH_Copy( C_old, C );
+    FLASH_Copy( A, C );
     FLASH_Obj_flatten( A, A_flat );
     FLASH_Obj_flatten( C, C_flat );
 
@@ -59,7 +60,7 @@ void time_Scal(
         REF_Scal( FLA_ONE, A_flat, C_flat );
         break;
       case FLA_ALG_FRONT:
-        FLASH_Scal( FLA_ONE, A, C );
+        FLASH_Scal( FLA_ONE, C );
         break;
       default:
         printf("trouble\n");

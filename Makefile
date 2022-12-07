@@ -175,6 +175,18 @@ MK_MAP_LAPACK2FLAMEC_F2C_FLAMEC_OBJS  :=
 MK_MAP_LAPACK2FLAMEC_F2C_INSTALL_SRC  :=
 MK_MAP_LAPACK2FLAMEC_F2C_INSTALL_OBJS :=
 
+MK_MAP_LAPACK2FLASH_SRC               :=
+MK_MAP_LAPACK2FLASH_OBJS              :=
+
+MK_MAP_LAPACK2FLASH_F2C_SRC           :=
+MK_MAP_LAPACK2FLASH_F2C_OBJS          :=
+
+MK_MAP_LAPACK2FLASH_F2C_FLAMEC_SRC    :=
+MK_MAP_LAPACK2FLASH_F2C_FLAMEC_OBJS   :=
+
+MK_MAP_LAPACK2FLASH_F2C_INSTALL_SRC   :=
+MK_MAP_LAPACK2FLASH_F2C_INSTALL_OBJS  :=
+
 MK_FLABLAS_F2C_SRC                    :=
 MK_FLABLAS_F2C_OBJS                   :=
 
@@ -332,6 +344,15 @@ L2F_HEADER_DIR_PATHS := $(dir $(foreach frag_path, $(L2F_FRAG_DIR_PATHS), \
 INCLUDE_PATHS   += $(strip $(patsubst %, -I%, $(L2F_HEADER_DIR_PATHS)))
 endif
 
+# When lapack2flash is enabled, we need to add a -I option for the directory
+# in which the lapack2flash headers reside.
+ifeq ($(FLA_ENABLE_LAPACK2FLASH),yes)
+L2FLASH_FRAG_DIR_PATHS   := $(filter $(DIST_PATH)/src/map/lapack2flash%,$(FRAGMENT_DIR_PATHS))
+L2FLASH_HEADER_DIR_PATHS := $(dir $(foreach frag_path, $(L2FLASH_FRAG_DIR_PATHS), \
+                                       $(firstword $(wildcard $(frag_path)/*.h))))
+INCLUDE_PATHS   += $(strip $(patsubst %, -I%, $(L2FLASH_HEADER_DIR_PATHS)))
+endif
+
 # Add the include flags determined above to various compiler flags variables.
 CFLAGS          := $(CFLAGS) $(INCLUDE_PATHS)
 CFLAGS_NOOPT    := $(CFLAGS_NOOPT) $(INCLUDE_PATHS)
@@ -372,6 +393,18 @@ MK_MAP_LAPACK2FLAMEC_F2C_FLAMEC_OBJS  := $(patsubst $(SRC_PATH)/%.c, $(BASE_OBJ_
 MK_MAP_LAPACK2FLAMEC_F2C_INSTALL_OBJS := $(patsubst $(SRC_PATH)/%.c, $(BASE_OBJ_PATH)/%.o, \
                                                     $(filter %.c, $(MK_MAP_LAPACK2FLAMEC_F2C_INSTALL_SRC)))
 
+MK_MAP_LAPACK2FLASH_OBJS              := $(patsubst $(SRC_PATH)/%.c, $(BASE_OBJ_PATH)/%.o, \
+                                                    $(filter %.c, $(MK_MAP_LAPACK2FLASH_SRC)))
+
+MK_MAP_LAPACK2FLASH_F2C_OBJS          := $(patsubst $(SRC_PATH)/%.c, $(BASE_OBJ_PATH)/%.o, \
+                                                    $(filter %.c, $(MK_MAP_LAPACK2FLASH_F2C_SRC)))
+
+MK_MAP_LAPACK2FLASH_F2C_FLAMEC_OBJS   := $(patsubst $(SRC_PATH)/%.c, $(BASE_OBJ_PATH)/%.o, \
+                                                    $(filter %.c, $(MK_MAP_LAPACK2FLASH_F2C_FLAMEC_SRC)))
+
+MK_MAP_LAPACK2FLASH_F2C_INSTALL_OBJS  := $(patsubst $(SRC_PATH)/%.c, $(BASE_OBJ_PATH)/%.o, \
+                                                    $(filter %.c, $(MK_MAP_LAPACK2FLASH_F2C_INSTALL_SRC)))
+
 # Combine the base, blas, and lapack libraries.
 MK_ALL_FLAMEC_OBJS        := $(MK_BASE_FLAMEC_OBJS) \
                              $(MK_BLAS_FLAMEC_OBJS) \
@@ -388,10 +421,22 @@ MK_ALL_FLAMEC_OBJS        := $(MK_MAP_LAPACK2FLAMEC_OBJS) \
                              $(MK_ALL_FLAMEC_OBJS)
 endif
 
+ifeq ($(FLA_ENABLE_LAPACK2FLASH),yes)
+MK_ALL_FLAMEC_OBJS        := $(MK_MAP_LAPACK2FLASH_OBJS) \
+                             $(MK_MAP_LAPACK2FLASH_F2C_OBJS) \
+                             $(MK_MAP_LAPACK2FLASH_F2C_FLAMEC_OBJS) \
+                             $(MK_MAP_LAPACK2FLASH_F2C_INSTALL_OBJS) \
+                             $(MK_ALL_FLAMEC_OBJS)
+endif
+
 # BLAS
 ifeq ($(FLA_ENABLE_BUILTIN_BLAS),yes)
 ifeq ($(FLA_ENABLE_LAPACK2FLAME),no)
 MK_FLABLAS_F2C_OBJS       := $(MK_MAP_LAPACK2FLAMEC_F2C_INSTALL_OBJS) \
+                             $(MK_FLABLAS_F2C_OBJS)
+endif
+ifeq ($(FLA_ENABLE_LAPACK2FLASH),no)
+MK_FLABLAS_F2C_OBJS       := $(MK_MAP_LAPACK2FLASH_F2C_INSTALL_OBJS) \
                              $(MK_FLABLAS_F2C_OBJS)
 endif
 MK_ALL_FLAMEC_OBJS        := $(MK_FLABLAS_F2C_OBJS) \
@@ -416,7 +461,7 @@ install: libs install-libs install-lib-symlinks install-headers
 
 uninstall: uninstall-libs uninstall-lib-symlinks uninstall-headers
 
-clean: cleanh cleanlib
+clean: cleanh cleanobj cleanlib
 
 
 
@@ -519,17 +564,20 @@ endif
 libflame: check-env $(MK_LIBS)
 
 
+
 # --- Static library archiver rules ---
 
 $(LIBFLAME_A_PATH): $(MK_ALL_FLAMEC_OBJS)
 ifeq ($(ENABLE_VERBOSE),yes)
 ifeq ($(FLA_ENABLE_MAX_ARG_LIST_HACK),yes)
+	$(SORT) $(AR_OBJ_LIST_FILE) | $(UNIQ) > $(AR_OBJ_LIST_FILE).atmp
 ### Kyungjoo 2015.10.21
-	$(CAT) $(AR_OBJ_LIST_FILE) | xargs -n$(AR_CHUNK_SIZE) $(AR) $(ARFLAGS) $@
+	$(CAT) $(AR_OBJ_LIST_FILE).atmp | xargs -n$(AR_CHUNK_SIZE) $(AR) $(ARFLAGS) $@
 ### Previous hack (works on linux, not on osx; osx's ar does not support @file)
 #	echo $(ARFLAGS) $@ > $(AR_ARG_LIST_FILE)
 #	$(CAT) $(AR_OBJ_LIST_FILE) >> $(AR_ARG_LIST_FILE)
 #	$(AR) @$(AR_ARG_LIST_FILE)
+	$(RM_F) $(AR_OBJ_LIST_FILE).atmp
 else
 #	NOTE: Can't use $^ automatic variable as long as $(AR_OBJ_LIST_FILE) is in
 #	the list of prerequisites.
@@ -541,12 +589,14 @@ endif
 else
 	@echo "Archiving $@"
 ifeq ($(FLA_ENABLE_MAX_ARG_LIST_HACK),yes)
+	@$(SORT) $(AR_OBJ_LIST_FILE) | $(UNIQ) > $(AR_OBJ_LIST_FILE).atmp
 ### Kyungjoo 2015.10.21
-	@$(CAT) $(AR_OBJ_LIST_FILE) | xargs -n$(AR_CHUNK_SIZE) $(AR) $(ARFLAGS) $@
+	@$(CAT) $(AR_OBJ_LIST_FILE).atmp | xargs -n$(AR_CHUNK_SIZE) $(AR) $(ARFLAGS) $@
 ### Previous hack (works on linux, not on osx; osx's ar does not support @file)
 #	@echo $(ARFLAGS) $@ > $(AR_ARG_LIST_FILE)
 #	@$(CAT) $(AR_OBJ_LIST_FILE) >> $(AR_ARG_LIST_FILE)
 #	@$(AR) @$(AR_ARG_LIST_FILE)
+	@$(RM_F) $(AR_OBJ_LIST_FILE).atmp
 else
 #	NOTE: Can't use $^ automatic variable as long as $(AR_OBJ_LIST_FILE) is in
 #	the list of prerequisites.
@@ -563,12 +613,14 @@ endif
 $(LIBFLAME_SO_PATH): $(MK_ALL_FLAMEC_OBJS)
 ifeq ($(ENABLE_VERBOSE),yes)
 ifeq ($(FLA_ENABLE_MAX_ARG_LIST_HACK),yes)
-	$(CAT) $(AR_OBJ_LIST_FILE) | xargs -n$(AR_CHUNK_SIZE) $(AR) $(ARFLAGS) $(LIBFLAME_A)
+	$(SORT) $(AR_OBJ_LIST_FILE) | $(UNIQ) > $(AR_OBJ_LIST_FILE).sotmp
+	$(CAT) $(AR_OBJ_LIST_FILE).sotmp | xargs -n$(AR_CHUNK_SIZE) $(AR) $(ARFLAGS) $(LIBFLAME_A)
 ifeq ($(OS_NAME),Darwin)
 	$(LINKER) $(SOFLAGS) -o $@ -Wl,-force_load,$(LIBFLAME_A) $(LDFLAGS)
 else
 	$(LINKER) $(SOFLAGS) -o $@ -Wl,--whole-archive $(LIBFLAME_A) -Wl,--no-whole-archive $(LDFLAGS)
 endif
+	$(RM_F) $(AR_OBJ_LIST_FILE).sotmp
 else
 #	NOTE: Can't use $^ automatic variable as long as $(AR_OBJ_LIST_FILE) is in
 #	the list of prerequisites.
@@ -577,12 +629,14 @@ endif
 else
 	@echo "Dynamically linking $@"
 ifeq ($(FLA_ENABLE_MAX_ARG_LIST_HACK),yes)
-	@$(CAT) $(AR_OBJ_LIST_FILE) | xargs -n$(AR_CHUNK_SIZE) $(AR) $(ARFLAGS) $(LIBFLAME_A)
+	@$(SORT) $(AR_OBJ_LIST_FILE) | $(UNIQ) > $(AR_OBJ_LIST_FILE).sotmp
+	@$(CAT) $(AR_OBJ_LIST_FILE).sotmp | xargs -n$(AR_CHUNK_SIZE) $(AR) $(ARFLAGS) $(LIBFLAME_A)
 ifeq ($(OS_NAME),Darwin)
 	@$(LINKER) $(SOFLAGS) -o $@ -Wl,-force_load,$(LIBFLAME_A) $(LDFLAGS)
 else
 	@$(LINKER) $(SOFLAGS) -o $@ -Wl,--whole-archive $(LIBFLAME_A) -Wl,--no-whole-archive $(LDFLAGS)
 endif
+	@$(RM_F) $(AR_OBJ_LIST_FILE).sotmp
 else
 #	NOTE: Can't use $^ automatic variable as long as $(AR_OBJ_LIST_FILE) is in
 #	the list of prerequisites.
@@ -729,25 +783,49 @@ else
 endif
 endif
 
-cleanlib:
+cleanobj:
 ifeq ($(IS_CONFIGURED),yes)
 ifeq ($(ENABLE_VERBOSE),yes)
 	- $(FIND) $(BASE_OBJ_PATH) -name "*.o" | $(XARGS) $(RM_F)
-	- $(RM_F) $(LIBBLIS_A_PATH)
-	- $(RM_F) $(LIBBLIS_SO_PATH)
 else
 	@echo "Removing object files from $(BASE_OBJ_PATH)"
 	@$(FIND) $(BASE_OBJ_PATH) -name "*.o" | $(XARGS) $(RM_F)
-	@echo "Removing libraries from $(BASE_LIB_PATH)"
-	@$(RM_F) $(LIBBLIS_A_PATH)
-	@$(RM_F) $(LIBBLIS_SO_PATH)
 endif
 endif
 
-distclean: cleanmk cleanh cleanlib
+cleanlib: cleanhack
+ifeq ($(IS_CONFIGURED),yes)
+ifeq ($(ENABLE_VERBOSE),yes)
+	- $(RM_F) $(LIBFLAME_A_PATH)
+	- $(RM_F) $(LIBFLAME_SO_PATH)
+else
+	@echo "Removing libraries from $(BASE_LIB_PATH)"
+	@$(RM_F) $(LIBFLAME_A_PATH)
+	@$(RM_F) $(LIBFLAME_SO_PATH)
+endif
+endif
+
+cleanhack:
+ifeq ($(IS_CONFIGURED),yes)
+ifeq ($(ENABLE_VERBOSE),yes)
+ifeq ($(FLA_ENABLE_MAX_ARG_LIST_HACK),yes)
+	- $(RM_F) $(LIBFLAME_A)
+endif
+else
+ifeq ($(FLA_ENABLE_MAX_ARG_LIST_HACK),yes)
+	@echo "Removing temporary $(LIBFLAME_A) archive"
+	@$(RM_F) $(LIBFLAME_A)
+endif
+endif
+endif
+
+
+distclean: cleanmk cleanh cleanobj cleanlib cleanhack
 ifeq ($(IS_CONFIGURED),yes)
 ifeq ($(ENABLE_VERBOSE),yes)
 	- $(RM_F) $(AR_OBJ_LIST_FILE)
+	- $(RM_F) $(AR_OBJ_LIST_FILE).atmp
+	- $(RM_F) $(AR_OBJ_LIST_FILE).sotmp
 	- $(RM_RF) $(CONFIG_DIR)
 	- $(RM_RF) $(OBJ_DIR)
 	- $(RM_RF) $(LIB_DIR)

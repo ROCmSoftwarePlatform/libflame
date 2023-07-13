@@ -1,6 +1,7 @@
 /*
 
     Copyright (C) 2014, The University of Texas at Austin
+    Copyright (C) 2023, Advanced Micro Devices, Inc.
 
     This file is part of libflame and is available under the 3-Clause
     BSD license, which can be found in the LICENSE file at the top-level
@@ -73,7 +74,7 @@ typedef struct FLASH_Queue_variables
 {
    // A lock on the global task counter.  
    // Needed only when multithreading is enabled.
-   FLA_Lock     all_lock;
+   FLA_Lock*    all_lock;
 
    // A lock that protects the thread's waiting queue.
    // Needed only when multithreading is enabled.
@@ -142,12 +143,6 @@ typedef struct FLASH_Queue_variables
    // LRU software cache of HIP memory.
    FLA_Obj_hip* hip;
 
-   // Storing the block being evicted.
-   FLA_Obj_hip* victim;
-
-   // Temporary storage for logging blocks on the accelerator.
-   FLA_Obj_hip* hip_log;
-
    // The size of each block to allocate on the accelerator.
    dim_t        block_size;
 
@@ -174,10 +169,10 @@ void FLASH_Queue_exec( void )
    dim_t        block_size = FLASH_Queue_get_block_size();
    double       dtime;
 
-   FLA_Lock*    run_lock;
-   FLA_Lock*    dep_lock;
-   FLA_Lock*    war_lock;
-   FLA_Lock*    cac_lock;
+   FLA_Lock*    run_lock = NULL;
+   FLA_Lock*    dep_lock = NULL;
+   FLA_Lock*    war_lock = NULL;
+   FLA_Lock*    cac_lock = NULL;
 
    FLA_Obj*     cache;
    FLA_Obj*     prefetch;
@@ -195,11 +190,9 @@ void FLASH_Queue_exec( void )
 
 #ifdef FLA_ENABLE_HIP
 #ifdef FLA_ENABLE_MULTITHREADING
-   FLA_RWLock*    hip_lock;
+   FLA_RWLock*    hip_lock = NULL;
 #endif
    FLA_Obj_hip* hip;
-   FLA_Obj_hip* victim;
-   FLA_Obj_hip* hip_log;
    dim_t        hip_n_blocks = FLASH_Queue_get_hip_num_blocks();
 #endif
 
@@ -272,37 +265,40 @@ void FLASH_Queue_exec( void )
    args.n_caches = n_caches;
 
 #ifdef FLA_ENABLE_MULTITHREADING
-   // Allocate memory for array of locks.
-   run_lock = ( FLA_Lock* ) FLA_malloc( n_queues  * sizeof( FLA_Lock ) );
-   dep_lock = ( FLA_Lock* ) FLA_malloc( n_threads * sizeof( FLA_Lock ) );
-   war_lock = ( FLA_Lock* ) FLA_malloc( n_threads * sizeof( FLA_Lock ) );
-   cac_lock = ( FLA_Lock* ) FLA_malloc( n_caches  * sizeof( FLA_Lock ) );
-
-   args.run_lock = run_lock;
-   args.dep_lock = dep_lock;
-   args.war_lock = war_lock;
-   args.cac_lock = cac_lock;
-
-   // Initialize the all lock.
-   FLA_Lock_init( &(args.all_lock) );
-   
-   // Initialize the run lock for thread i.
-   for ( i = 0; i < n_queues; i++ )
+   // If needed: allocate memory for locks and initialize.
+   if ( n_threads > 1 || n_queues > 1 || n_caches > 1 )
    {
-      FLA_Lock_init( &(args.run_lock[i]) );
+      args.all_lock = ( FLA_Lock* ) FLA_malloc( sizeof( FLA_Lock ) );
+      FLA_Lock_init( args.all_lock );
+      run_lock = ( FLA_Lock* ) FLA_malloc( n_queues  * sizeof( FLA_Lock ) );
+      args.run_lock = run_lock;
+      for ( i = 0; i < n_queues; i++ )
+      {
+         FLA_Lock_init( &(args.run_lock[i]) );
+      }
+      dep_lock = ( FLA_Lock* ) FLA_malloc( n_threads * sizeof( FLA_Lock ) );
+      war_lock = ( FLA_Lock* ) FLA_malloc( n_threads * sizeof( FLA_Lock ) );
+      args.dep_lock = dep_lock;
+      args.war_lock = war_lock;
+      for ( i = 0; i < n_threads; i++ )
+      {
+         FLA_Lock_init( &(args.dep_lock[i]) );
+         FLA_Lock_init( &(args.war_lock[i]) );
+      }
+      cac_lock = ( FLA_Lock* ) FLA_malloc( n_caches  * sizeof( FLA_Lock ) );
+      args.cac_lock = cac_lock;
+      for ( i = 0; i < n_caches; i++ )
+      {
+         FLA_Lock_init( &(args.cac_lock[i]) );
+      }
    }
-
-   // Initialize the dep and war locks for thread i.
-   for ( i = 0; i < n_threads; i++ )
+   else
    {
-      FLA_Lock_init( &(args.dep_lock[i]) );
-      FLA_Lock_init( &(args.war_lock[i]) );
-   }
-
-   // Initialize the cac locks for each cache.
-   for ( i = 0; i < n_caches; i++ )
-   {
-      FLA_Lock_init( &(args.cac_lock[i]) );
+      args.all_lock = NULL;
+      args.run_lock = NULL;
+      args.dep_lock = NULL;
+      args.war_lock = NULL;
+      args.cac_lock = NULL;
    }
 #endif
 
@@ -372,12 +368,16 @@ void FLASH_Queue_exec( void )
 
 #ifdef FLA_ENABLE_HIP
 #ifdef FLA_ENABLE_MULTITHREADING
-   // Allocate and initialize the hip locks.
-   hip_lock = ( FLA_RWLock* ) FLA_malloc( n_threads * sizeof( FLA_RWLock ) );
-   args.hip_lock = hip_lock;
-
-   for ( i = 0; i < n_threads; i++ )
-      FLA_RWLock_init( &(args.hip_lock[i]) );
+   if ( n_threads > 1 )
+   {
+      // Allocate and initialize the hip locks.
+      hip_lock = ( FLA_RWLock* ) FLA_malloc( n_threads * sizeof( FLA_RWLock ) );
+      args.hip_lock = hip_lock;
+      for ( i = 0; i < n_threads; i++ )
+         FLA_RWLock_init( &(args.hip_lock[i]) );
+   }
+   else
+      args.hip_lock = NULL;
 #endif
    // Allocate and initialize HIP software cache.
    hip = ( FLA_Obj_hip* ) FLA_malloc( hip_n_blocks * n_threads * sizeof( FLA_Obj_hip ) );
@@ -390,15 +390,6 @@ void FLASH_Queue_exec( void )
       args.hip[i].clean      = TRUE;
       args.hip[i].request    = FALSE;
    }
-
-   victim = ( FLA_Obj_hip* ) FLA_malloc( n_threads * sizeof( FLA_Obj_hip ) );
-   args.victim = victim;
-
-   for ( i = 0; i < n_threads; i++ )
-      args.victim[i].obj.base = NULL;
-
-   hip_log = ( FLA_Obj_hip* ) FLA_malloc( hip_n_blocks * n_threads * sizeof( FLA_Obj_hip ) );
-   args.hip_log = hip_log;
 #endif
 
    // Initialize tasks with critical information.
@@ -425,7 +416,7 @@ void FLASH_Queue_exec( void )
 
 #ifdef FLA_ENABLE_MULTITHREADING   
    // Destroy the locks.
-   FLA_Lock_destroy( &(args.all_lock) );
+   FLA_Lock_destroy( args.all_lock );
 
    for ( i = 0; i < n_queues; i++ )
    {
@@ -444,10 +435,11 @@ void FLASH_Queue_exec( void )
    }
 
    // Deallocate memory.
-   FLA_free( run_lock );
-   FLA_free( dep_lock );
-   FLA_free( war_lock );
-   FLA_free( cac_lock );
+   if ( args.all_lock != NULL ) FLA_free( args.all_lock );
+   if ( run_lock != NULL ) FLA_free( run_lock );
+   if ( dep_lock != NULL ) FLA_free( dep_lock );
+   if ( war_lock != NULL ) FLA_free( war_lock );
+   if ( cac_lock != NULL ) FLA_free( cac_lock );
 #endif
 
    FLA_free( cache );
@@ -469,11 +461,9 @@ void FLASH_Queue_exec( void )
 #ifdef FLA_ENABLE_MULTITHREADING
    for ( i = 0; i < n_threads; i++ )
       FLA_RWLock_destroy( &(args.hip_lock[i]) );
-   FLA_free( hip_lock );
+   if ( hip_lock != NULL ) FLA_free( hip_lock );
 #endif
    FLA_free( hip );
-   FLA_free( victim );
-   FLA_free( hip_log );
 #endif
 
    // Reset values for next call to FLASH_Queue_exec().
@@ -2238,6 +2228,10 @@ void FLASH_Queue_create_hip( int thread, void *arg )
    // Bind thread to a HIP device
    FLASH_Queue_bind_hip( thread );
 
+#ifdef FLA_ENABLE_MULTITHREADING
+   FLA_RWLock_write_acquire( &(args->hip_lock[thread]) ); // G ***
+#endif
+
    // Allocate the static block cache on device if managed memory is not used
    if ( ! FLASH_Queue_get_malloc_managed_enabled_hip() )
    {
@@ -2254,6 +2248,9 @@ void FLASH_Queue_create_hip( int thread, void *arg )
       for ( i = 0; i < hip_n_blocks; i++ )
          args->hip[thread * hip_n_blocks + i].buffer_hip = (void*) (thread * hip_n_blocks + i);
    }
+#ifdef FLA_ENABLE_MULTITHREADING
+   FLA_RWLock_release( &(args->hip_lock[thread]) ); // G ***
+#endif
 
    return;
 }
@@ -2279,6 +2276,10 @@ void FLASH_Queue_destroy_hip( int thread, void *arg )
    if ( FLASH_Queue_get_malloc_managed_enabled_hip( ) )
       return;
 
+#ifdef FLA_ENABLE_MULTITHREADING
+   FLA_RWLock_read_acquire( &(args->hip_lock[thread]) ); // G ***
+#endif
+
    // Examine every block left on the HIP device.
    for ( i = 0; i < hip_n_blocks; i++ )
    {
@@ -2290,6 +2291,10 @@ void FLASH_Queue_destroy_hip( int thread, void *arg )
       // Free the memory on the HIP for all the blocks.
       FLASH_Queue_free_async_hip( thread, hip_obj.buffer_hip );
    }
+
+#ifdef FLA_ENABLE_MULTITHREADING
+   FLA_RWLock_release( &(args->hip_lock[thread]) ); // G ***
+#endif
 
    return;
 }
@@ -2346,7 +2351,9 @@ FLA_Bool FLASH_Queue_exec_hip( FLASH_Task *t, void *arg )
       FLA_Bool duplicate;
       FLA_Obj  obj;
 
+#ifdef FLA_ENABLE_HIP_DEBUG
       printf("DEBUG: Task not HIP enabled! Name: %s\n", t->name);
+#endif
 
       // Check the blocks on each HIP device.
       for ( k = 0; k < n_threads; k++ )
@@ -2593,10 +2600,6 @@ FLA_Bool FLASH_Queue_check_block_hip( FLA_Obj obj, int thread, void *arg )
       }
    }
 
-   // Check the victim block.
-   if ( obj.base == args->victim[thread].obj.base )
-      r_val = FALSE;
-
 #ifdef FLA_ENABLE_MULTITHREADING
    FLA_RWLock_release( &(args->hip_lock[thread]) ); // G ***
 #endif
@@ -2753,7 +2756,8 @@ void FLASH_Queue_update_block_hip( FLA_Obj obj,
       if ( evict_obj.obj.base != NULL && !evict_obj.clean )
       {
          evict = TRUE;
-         args->victim[thread] = evict_obj;
+         // Start async read
+         FLASH_Queue_read_async_hip( thread, evict_obj.obj, evict_obj.buffer_hip );
       }
 
       // Save the block in the data structure.
@@ -2774,24 +2778,15 @@ void FLASH_Queue_update_block_hip( FLA_Obj obj,
    // Place the block on the cache as the most recently used.
    args->hip[thread * hip_n_blocks] = hip_obj;
 
-#ifdef FLA_ENABLE_MULTITHREADING
-   FLA_RWLock_release( &(args->hip_lock[thread]) ); // G ***
-#endif
-
    // Evict and flush the LRU dirty block.
    if ( evict )
    {
-      FLASH_Queue_read_hip( thread, evict_obj.obj, evict_obj.buffer_hip );
-#ifdef FLA_ENABLE_MULTITHREADING
-      FLA_RWLock_write_acquire( &(args->hip_lock[thread]) ); // G ***
-#endif
-
-      args->victim[thread].obj.base = NULL;
-
-#ifdef FLA_ENABLE_MULTITHREADING
-      FLA_RWLock_release( &(args->hip_lock[thread]) ); // G ***
-#endif
+      FLASH_Queue_sync_device_hip( thread );
    }
+
+#ifdef FLA_ENABLE_MULTITHREADING
+   FLA_RWLock_release( &(args->hip_lock[thread]) ); // G ***
+#endif
 
    // Move the block to the HIP device.
    if ( transfer )
@@ -2927,18 +2922,16 @@ void FLASH_Queue_flush_block_hip( FLA_Obj obj, int thread, void *arg )
    // Locate the position of the block on the HIP device.
    for ( k = 0; k < hip_n_blocks; k++ )
       if ( obj.base == args->hip[thread * hip_n_blocks + k].obj.base )
+      {
+         // The block is owned by the HIP device.
+	 // Save the block that will be flushed.
+         hip_obj = args->hip[thread * hip_n_blocks + k];
+
+         // If the block is dirty, then flush it.
+         if ( hip_obj.obj.base != NULL && !hip_obj.clean )
+            transfer = TRUE;
          break;
-
-   // The block is owned by the HIP device.
-   if ( k < hip_n_blocks )
-   {
-      // Save the block that will be flushed.
-      hip_obj = args->hip[thread * hip_n_blocks + k];
-
-      // If the block is dirty, then flush it.
-      if ( hip_obj.obj.base != NULL && !hip_obj.clean )
-         transfer = TRUE;
-   }
+      }
 
 #ifdef FLA_ENABLE_MULTITHREADING
    FLA_RWLock_release( &(args->hip_lock[thread]) ); // G ***
@@ -2958,14 +2951,12 @@ void FLASH_Queue_flush_block_hip( FLA_Obj obj, int thread, void *arg )
    // Locate the position of the block on the HIP device.
    for ( k = 0; k < hip_n_blocks; k++ )
       if ( obj.base == args->hip[thread * hip_n_blocks + k].obj.base )
+      {
+         // Update the bits for the flushed block.
+         args->hip[thread * hip_n_blocks + k].clean   = TRUE;
+         args->hip[thread * hip_n_blocks + k].request = FALSE;
          break;
-
-   if ( k < hip_n_blocks )
-   {
-      // Update the bits for the flushed block.
-      args->hip[thread * hip_n_blocks + k].clean   = TRUE;
-      args->hip[thread * hip_n_blocks + k].request = FALSE;
-   }
+      }
 
 #ifdef FLA_ENABLE_MULTITHREADING
    FLA_RWLock_release( &(args->hip_lock[thread]) ); // G ***
@@ -2983,7 +2974,7 @@ void FLASH_Queue_flush_hip( int thread, void *arg )
 ----------------------------------------------------------------------------*/
 {
    FLASH_Queue_vars* args = ( FLASH_Queue_vars* ) arg;
-   int i, k;
+   int k;
    dim_t hip_n_blocks = FLASH_Queue_get_hip_num_blocks();
    int n_transfer = 0;
    FLA_Obj_hip hip_obj;
@@ -2993,7 +2984,7 @@ void FLASH_Queue_flush_hip( int thread, void *arg )
       return;
 
 #ifdef FLA_ENABLE_MULTITHREADING
-   FLA_RWLock_read_acquire( &(args->hip_lock[thread]) ); // G ***
+   FLA_RWLock_write_acquire( &(args->hip_lock[thread]) ); // G ***
 #endif
 
    for ( k = 0; k < hip_n_blocks; k++ )
@@ -3004,64 +2995,18 @@ void FLASH_Queue_flush_hip( int thread, void *arg )
       // Flush the block if it is dirty and requested.
       if ( hip_obj.obj.base != NULL && !hip_obj.clean && hip_obj.request )
       {
-         // Save the block for data transfer outside the critical section.
-         args->hip_log[thread * hip_n_blocks + n_transfer] = hip_obj;
+         // Start async read of block
+         FLASH_Queue_read_async_hip( thread, hip_obj.obj, hip_obj.buffer_hip );
+         // Mark the block as clean - it will be once the device sync completes
+         // and prior to releasing the write lock
+         args->hip[thread * hip_n_blocks + k].clean   = TRUE;
+         args->hip[thread * hip_n_blocks + k].request = FALSE;
          n_transfer++;
       }
    }
 
-#ifdef FLA_ENABLE_MULTITHREADING
-   FLA_RWLock_release( &(args->hip_lock[thread]) ); // G ***
-#endif
-
-   // Exit early if a flush is not required.   
-   if ( n_transfer == 0 )
-      return;
-
-   // Flush the block(s) outside the critical section.
-   if ( n_transfer == 1 )
-   {
-      hip_obj = args->hip_log[thread * hip_n_blocks];
-      FLASH_Queue_read_hip( thread, hip_obj.obj, hip_obj.buffer_hip );
-   }
-   else if ( n_transfer == 2 && !FLASH_Queue_get_malloc_managed_enabled_hip( ) )
-   {
-      // two sync memcpys are faster typically than two async plus device sync
-      hip_obj = args->hip_log[thread * hip_n_blocks];
-      FLASH_Queue_read_hip( thread, hip_obj.obj, hip_obj.buffer_hip );
-      hip_obj = args->hip_log[thread * hip_n_blocks + 1];
-      FLASH_Queue_read_hip( thread, hip_obj.obj, hip_obj.buffer_hip );
-   }
-   else
-   {
-      for ( i = 0; i < n_transfer; i++ )
-      {
-         hip_obj = args->hip_log[thread * hip_n_blocks + i];
-         FLASH_Queue_read_async_hip( thread, hip_obj.obj, hip_obj.buffer_hip );
-      }
+   if ( n_transfer > 0 )
       FLASH_Queue_sync_device_hip( thread );
-   }
-
-#ifdef FLA_ENABLE_MULTITHREADING
-   FLA_RWLock_write_acquire( &(args->hip_lock[thread]) ); // G ***
-#endif
-
-   // Update the bits for each block that is flushed.
-   for ( i = 0; i < n_transfer; i++ )
-   {
-      // Locate the position of the block on the HIP device.
-      for ( k = 0; k < hip_n_blocks; k++ )
-         if ( args->hip_log[thread * hip_n_blocks + i].obj.base ==
-              args->hip[thread * hip_n_blocks + k].obj.base )
-            break;
-
-      if ( k < hip_n_blocks )
-      {
-         // The block is now clean.
-         args->hip[thread * hip_n_blocks + k].clean   = TRUE;
-         args->hip[thread * hip_n_blocks + k].request = FALSE;
-      }
-   }
 
 #ifdef FLA_ENABLE_MULTITHREADING
    FLA_RWLock_release( &(args->hip_lock[thread]) ); // G ***
@@ -3334,7 +3279,7 @@ void* FLASH_Queue_exec_parallel_function( void* arg )
          }
       }
 
-      FLA_Lock_acquire( &(args->all_lock) ); // A ***
+      FLA_Lock_acquire( args->all_lock ); // A ***
 
       // Increment program counter.
       if ( available && committed )
@@ -3344,7 +3289,7 @@ void* FLASH_Queue_exec_parallel_function( void* arg )
       if ( args->pc >= n_tasks )
          condition = FALSE;
       
-      FLA_Lock_release( &(args->all_lock) ); // A ***
+      FLA_Lock_release( args->all_lock ); // A ***
    }
 
 #ifdef FLA_ENABLE_GPU

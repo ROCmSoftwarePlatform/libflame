@@ -149,11 +149,11 @@ int main(int argc, char *argv[])
       // If multiplying Q on the left, A is m x m; ...on the right, A is n x n.
       if ( pc_str[param_combo][0] == 'l' )
       {
-        FLA_Obj_create( datatype, nb_alg, nb_alg, &A_flat );
+        FLA_Obj_create( datatype, nb_alg, nb_alg, 0, 0, &A_flat );
         FLASH_Obj_create( datatype, nb_alg, nb_alg, 1, &nb_alg, &A );
         FLASH_Obj_create( datatype, nb_alg, nb_alg, 1, &nb_alg, &A_save );
 
-        FLA_Obj_create( datatype, bm, bn, &T_flat );
+        FLA_Obj_create( datatype, bm, bn, 0, 0, &T_flat );
         FLASH_Obj_create_ext( datatype, bm, bn, 1, &bm, &bn, &T );
         FLASH_Obj_create_ext( datatype, bm, n,  1, &bm, &bn, &W );
       }
@@ -165,7 +165,7 @@ int main(int argc, char *argv[])
       FLASH_Obj_create( datatype, nb_alg, n, 1, &nb_alg, &B );
       FLASH_Obj_create( datatype, nb_alg, n, 1, &nb_alg, &B_ref );
 
-      FLA_Obj_create( datatype, nb_alg, 1, &t );
+      FLA_Obj_create( datatype, nb_alg, 1, 0, 0, &t );
 
       FLASH_Random_matrix( A );
       FLASH_Random_matrix( B );
@@ -188,7 +188,8 @@ int main(int argc, char *argv[])
       FLASH_Copy( A_save, A );
 
       FLASH_Obj_flatten( A, A_flat );
-      FLA_QR_UT( A_flat, t, T_flat );
+      //FLA_QR_UT( A_flat, t, T_flat );
+      FLA_QR_UT( A_flat, T_flat );
       FLASH_Obj_hierarchify( A_flat, A );
       FLASH_Obj_hierarchify( T_flat, T );
 

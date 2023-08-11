@@ -119,10 +119,10 @@ int main(int argc, char *argv[])
 
     for ( param_combo = 0; param_combo < n_param_combos; param_combo++ )
     {
-      FLA_Obj_create( datatype, m,      m, &A_flat );
-      FLA_Obj_create( datatype, nb_alg, m, &T_flat );
-      FLA_Obj_create( datatype, nb_alg, n, &W_flat );
-      FLA_Obj_create( datatype, m,      n, &B_flat );
+      FLA_Obj_create( datatype, m,      m, 0, 0, &A_flat );
+      FLA_Obj_create( datatype, nb_alg, m, 0, 0, &T_flat );
+      FLA_Obj_create( datatype, nb_alg, n, 0, 0, &W_flat );
+      FLA_Obj_create( datatype, m,      n, 0, 0, &B_flat );
       FLA_Random_matrix( A_flat );
       FLA_Random_matrix( B_flat );
 

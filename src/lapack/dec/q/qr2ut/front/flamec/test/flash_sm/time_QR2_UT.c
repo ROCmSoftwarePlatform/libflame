@@ -58,7 +58,7 @@ void time_QR2_UT(
       case FLA_ALG_REFERENCE:
 //FLA_Obj_show( "A_flat:", A_flat, "%12.4e", "" );
         //FLA_QR_UT( A_flat, t, T_flat );
-        FLA_QR2_UT( B_flat,
+        FLASH_QR2_UT( B_flat,
                       D_flat, T_flat );
 //FLA_Obj_show( "A_flat_after:", A_flat, "%12.4e", "" );
 //FLA_Obj_show( "T_flat_after:", T_flat, "%12.4e", "" );

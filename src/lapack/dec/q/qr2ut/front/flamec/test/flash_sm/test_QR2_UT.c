@@ -131,10 +131,10 @@ int main(int argc, char *argv[])
     for ( param_combo = 0; param_combo < n_param_combos; param_combo++ )
     {
 
-      FLA_Obj_create( datatype, m,          nb_flash, 0, 0, &A_flat );
-      FLA_Obj_create( datatype, m,          nb_flash, 0, 0, &A_flat_ref );
-      FLA_Obj_create( datatype, m,          nb_flash, 0, 0, &T_flat );
-      FLA_Obj_create( datatype, nb_flash,   1,        0, 0, &t );
+      FLA_Obj_create( datatype, m,          nb_flash, &A_flat );
+      FLA_Obj_create( datatype, m,          nb_flash, &A_flat_ref );
+      FLA_Obj_create( datatype, m,          nb_flash, &T_flat );
+      FLA_Obj_create( datatype, nb_flash,   1,        &t );
 
       FLASH_Obj_create( datatype, m, nb_flash, 1, &nb_flash, &A );
       n_blocks_m = FLA_Obj_length( A );

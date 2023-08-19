@@ -127,13 +127,13 @@ int main(int argc, char *argv[])
 
   if ( datatype == FLA_DOUBLE || datatype == FLA_DOUBLE_COMPLEX )
   {
-    FLA_Obj_create( FLA_DOUBLE, 1, 1, 0, 0, &scale );
-    FLA_Obj_create( FLA_DOUBLE, 1, 1, 0, 0, &norm );
+    FLA_Obj_create( FLA_DOUBLE, 1, 1, &scale );
+    FLA_Obj_create( FLA_DOUBLE, 1, 1, &norm );
   }
   else if ( datatype == FLA_FLOAT || datatype == FLA_COMPLEX )
   {
-    FLA_Obj_create( FLA_FLOAT, 1, 1, 0, 0, &scale );
-    FLA_Obj_create( FLA_FLOAT, 1, 1, 0, 0, &norm );
+    FLA_Obj_create( FLA_FLOAT, 1, 1, &scale );
+    FLA_Obj_create( FLA_FLOAT, 1, 1, &norm );
   }
 
   FLASH_Queue_set_num_threads( n_threads );
@@ -158,10 +158,12 @@ int main(int argc, char *argv[])
       FLASH_Random_matrix( C );
 
       FLASH_Norm1( A, norm );
+      FLASH_Obj_shift_diagonal( FLA_NO_CONJUGATE, norm, A );
 
       FLASH_Norm1( B, norm );
       if ( FLA_Obj_is( isgn, FLA_MINUS_ONE ) )
         FLA_Negate( norm );
+      FLASH_Obj_shift_diagonal( FLA_NO_CONJUGATE, norm, B );
 
 
       FLASH_Copy( C, C_ref );

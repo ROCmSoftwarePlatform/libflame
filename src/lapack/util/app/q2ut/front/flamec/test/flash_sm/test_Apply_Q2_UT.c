@@ -120,7 +120,7 @@ int main(int argc, char *argv[])
     for ( param_combo = 0; param_combo < n_param_combos; param_combo++ )
     {
 
-      FLA_Obj_create( datatype, m, m, 0, 0, &A_flat );
+      FLA_Obj_create( datatype, m, m, &A_flat );
       FLA_Random_matrix( A_flat );
 
       FLASH_QR_UT_inc_create_hier_matrices( A_flat, 1, &nb_flash, nb_alg, &A, &T );
